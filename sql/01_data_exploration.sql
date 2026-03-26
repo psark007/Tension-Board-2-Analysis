@@ -2,11 +2,11 @@
  * TB2 Data exploration
  *
  * We will set out to the understand the database structure,
- * 	and to understand how this data actually produces climbs on a Tension Board.
+ * 	and to understand how this data actually models climbs on a Tension Board.
  *
  *
  * This data was downloaded via boardlib (https://github.com/lemeryfertitta/BoardLib) on 2026-03-14.
- * It is clear from the `kits` table that it was updated on 2026-01-22 (well, most of it).
+ * It is clear from the `shared_syncs` table that it was updated on 2026-01-22 (well, most of it).
  */
 
 --------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ uuid                            |layout_id|setter_id|setter_username|name       
 0027cc6eea485099809f5336a0452564|        9|    56399|memphisben     |Pre Game      |No matching.|  1|        8|        40|         40|     128|     |           1|          0|p22r1p49r1p74r3p76r4p78r2p80r2           |       0|        1|2021-02-13 01:52:54.000000|         1|
 002e2db25b124ff5719afdb2c6732b2c|        9|    33924|jfisch040      |Yoooooooooo   |            |  9|       16|        48|          4|     152|     |           1|          0|p1r3p14r2p67r1p73r2p80r2p279r4           |       0|        1|2021-02-13 01:52:57.000000|         0|
 
- * The frams column is what actually determines the holds on the climb, and what role they are.
+ * The frames column is what actually determines the holds on the climb, and what role they are.
  * There are some climb characteristics (name, desceription, whether or not matching is allowed, setter info, edges, whether it is listed).
  * The UUID is how we link the specifc climb to the other tables.
  * What is hsm?
@@ -133,7 +133,7 @@ climb_uuid                      |ascensionist_count|display_difficulty|quality_a
 0020974d7ee7f1b6d78b44a70f3fa27b|                 1|              24.0|            3.0|
 0024b68ebc5cbbcfbe653ec4ed224271|                 1|              23.0|            3.0|
  *
- * climb_uuid, ascentionist_count, display difficulty, and quality_average.
+ * climb_uuid, ascensionist_count, display_difficulty, and quality_average.
  */
 
 SELECT * FROM climb_stats;
@@ -835,7 +835,7 @@ id |product_id|name  |x  |y |mirrored_hole_id|mirror_group|
  * So we understand HOW the board works pretty well now. Let's summarize.
  * - There are about 128k climbs, across 3 layouts -- the TB1, TB2 (Mirror) and TB2 (Spray).
  * - There are about 147k statistcs for climbs. This includes multiple angles for each climb.
- * - Some key features are the frames, the angle, and the layout_id (the latter determins the board, the former the actual climb on the board)
+ * - Some key features are the frames, the angle, and the layout_id (the latter determines the board, the former the actual climb on the board)
  * - Hold positions are decoded via mapping placements to (x,y) coordinates (from the holes tables)
  * - There are four hold types: start, middle, finish, foot. 498 holds on the TB2.
  * - There are different hold sets (e.g., Wood/Plastic on TB2).

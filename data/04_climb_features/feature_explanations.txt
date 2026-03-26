@@ -1,0 +1,324 @@
+Tension Board 2 – Feature Engineering Explanation
+
+This document explains the engineered features used for climb difficulty prediction.
+
+--------------------------------------------------
+1. BASIC STRUCTURE FEATURES
+--------------------------------------------------
+
+angle
+Wall angle in degrees.
+
+total_holds
+Total number of holds in the climb.
+
+hand_holds / foot_holds
+Number of hand vs foot holds.
+
+start_holds / finish_holds / middle_holds
+Counts of hold roles.
+
+
+--------------------------------------------------
+2. MATCHING FEATURE
+--------------------------------------------------
+
+is_nomatch
+Binary feature indicating whether matching is disallowed.
+Derived from:
+- explicit flag OR
+- description text (e.g. “no match”, “no matching”)
+
+
+--------------------------------------------------
+3. SPATIAL FEATURES
+--------------------------------------------------
+
+mean_x, mean_y
+Center of mass of all holds.
+
+std_x, std_y
+Spread of holds.
+
+range_x, range_y
+Width and height of climb.
+
+min_y, max_y
+Lowest and highest holds.
+
+height_gained
+Total vertical gain.
+
+height_gained_start_finish
+Vertical gain from start to finish.
+
+
+--------------------------------------------------
+4. START / FINISH FEATURES
+--------------------------------------------------
+
+start_height, finish_height
+Average height of start/finish holds.
+
+start_height_min/max, finish_height_min/max
+Range of start/finish positions.
+
+
+--------------------------------------------------
+5. BOUNDING BOX FEATURES
+--------------------------------------------------
+
+bbox_area
+Area covered by climb.
+
+bbox_aspect_ratio
+Horizontal vs vertical shape.
+
+bbox_normalized_area
+Relative coverage of board.
+
+hold_density
+Holds per unit area.
+
+holds_per_vertical_foot
+Vertical density.
+
+
+--------------------------------------------------
+6. SYMMETRY FEATURES
+--------------------------------------------------
+
+left_holds, right_holds
+Distribution across board center.
+
+left_ratio
+Fraction of holds on left.
+
+symmetry_score
+Symmetry measure (1 = perfectly balanced).
+
+hand_left_ratio, hand_symmetry
+Same but for hand holds.
+
+
+--------------------------------------------------
+7. VERTICAL DISTRIBUTION
+--------------------------------------------------
+
+upper_holds, lower_holds
+Split around median height.
+
+upper_ratio
+Proportion of upper holds.
+
+
+--------------------------------------------------
+8. REACH / DISTANCE FEATURES
+--------------------------------------------------
+
+max_hand_reach, mean_hand_reach, std_hand_reach
+Distances between hand holds.
+
+hand_spread_x, hand_spread_y
+Spatial extent of hand holds.
+
+max_foot_spread, mean_foot_spread
+Foot hold spacing.
+
+max_hand_to_foot, mean_hand_to_foot
+Hand-foot distances.
+
+
+--------------------------------------------------
+9. HOLD DIFFICULTY FEATURES
+--------------------------------------------------
+
+mean_hold_difficulty
+Average difficulty of holds.
+
+max_hold_difficulty / min_hold_difficulty
+Extremes.
+
+std_hold_difficulty
+Variation.
+
+median_hold_difficulty
+Central tendency.
+
+difficulty_range
+Spread.
+
+mean_hand_difficulty / mean_foot_difficulty
+Role-specific difficulty.
+
+start_difficulty / finish_difficulty
+Entry and exit difficulty.
+
+
+--------------------------------------------------
+10. COMBINED / INTERACTION FEATURES
+--------------------------------------------------
+
+hand_foot_ratio
+Balance of hands vs feet.
+
+movement_density
+Holds per vertical distance.
+
+weighted_difficulty
+Height-weighted difficulty.
+
+difficulty_gradient
+Difference between start and finish difficulty.
+
+
+--------------------------------------------------
+11. SHAPE / GEOMETRY FEATURES
+--------------------------------------------------
+
+convex_hull_area
+Area of convex hull around holds.
+
+convex_hull_perimeter
+Perimeter.
+
+hull_area_to_bbox_ratio
+Compactness.
+
+
+--------------------------------------------------
+12. NEAREST-NEIGHBOR FEATURES
+--------------------------------------------------
+
+min_nn_distance / mean_nn_distance
+Spacing between holds.
+
+max_nn_distance
+Maximum separation.
+
+std_nn_distance
+Spread.
+
+
+--------------------------------------------------
+13. CLUSTERING FEATURES
+--------------------------------------------------
+
+mean_neighbors_12in
+Average nearby holds within 12 inches.
+
+max_neighbors_12in
+Max clustering.
+
+clustering_ratio
+Normalized clustering.
+
+
+--------------------------------------------------
+14. PATH FEATURES
+--------------------------------------------------
+
+path_length_vertical
+Estimated movement path length.
+
+path_efficiency
+Vertical gain vs path length.
+
+
+--------------------------------------------------
+15. REGIONAL DIFFICULTY FEATURES
+--------------------------------------------------
+
+lower_region_difficulty
+Bottom third difficulty.
+
+middle_region_difficulty
+Middle third difficulty.
+
+upper_region_difficulty
+Top third difficulty.
+
+difficulty_progression
+Change in difficulty from bottom to top.
+
+
+--------------------------------------------------
+16. DIFFICULTY TRANSITIONS
+--------------------------------------------------
+
+max_difficulty_jump
+Largest jump between moves.
+
+mean_difficulty_jump
+Average jump.
+
+difficulty_weighted_reach
+Distance weighted by difficulty.
+
+
+--------------------------------------------------
+17. NORMALIZED FEATURES
+--------------------------------------------------
+
+mean_x_normalized, mean_y_normalized
+Relative board position.
+
+std_x_normalized, std_y_normalized
+Normalized spread.
+
+start_height_normalized, finish_height_normalized
+Relative heights.
+
+spread_x_normalized, spread_y_normalized
+Coverage.
+
+
+--------------------------------------------------
+18. RELATIVE POSITION FEATURES
+--------------------------------------------------
+
+start_offset_from_typical
+Deviation from typical start height.
+
+finish_offset_from_typical
+Deviation from typical finish height.
+
+mean_y_relative_to_start
+Average height relative to start.
+
+max_y_relative_to_start
+Highest point relative to start.
+
+
+--------------------------------------------------
+19. DISTRIBUTION FEATURES
+--------------------------------------------------
+
+y_q25, y_q50, y_q75
+Height quartiles.
+
+y_iqr
+Spread.
+
+holds_bottom_quartile
+Lower density.
+
+holds_top_quartile
+Upper density.
+
+
+--------------------------------------------------
+SUMMARY
+--------------------------------------------------
+
+These features capture:
+
+- Geometry (shape, spread)
+- Movement (reach, density, path)
+- Difficulty (hold-based + progression)
+- Symmetry and balance
+- Spatial distribution
+
+Together they allow the model to approximate both:
+- physical movement complexity
+- and hold difficulty structure of a climb.

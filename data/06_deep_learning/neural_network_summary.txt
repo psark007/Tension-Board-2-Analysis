@@ -1,0 +1,33 @@
+
+### Neural Network Model Summary
+
+**Architecture:**
+- Input: 119 features
+- Hidden layers: [256, 128, 64]
+- Dropout rate: 0.2
+- Total parameters: 72,833
+
+**Training:**
+- Optimizer: Adam (lr=0.001)
+- Early stopping: 25 epochs patience
+- Best epoch: 121
+
+**Test Set Performance:**
+- MAE: 1.270
+- RMSE: 1.643
+- R²: 0.834
+- Accuracy within ±1 grade: 49.0%
+- Accuracy within ±2 grades: 80.2%
+- Exact grouped V-grade accuracy: 39.2%
+- Accuracy within ±1 V-grade: 84.3%
+- Accuracy within ±2 V-grades: 96.8%
+
+**Key Findings:**
+1. The neural network is competitive, but not clearly stronger than the best tree-based baseline.
+2. Fine-grained score prediction remains harder than grouped grade prediction.
+3. The grouped V-grade metrics show that the model captures broader difficulty bands more reliably than exact score labels.
+4. This makes the neural network useful as a comparison model, and potentially valuable in an ensemble.
+
+**Portfolio Interpretation:**
+This deep learning notebook extends the classical modelling pipeline by testing whether a neural architecture can improve prediction quality on engineered climbing features.
+The main result is not that deep learning wins outright, but that it provides a meaningful benchmark and helps clarify where model complexity does and does not add value.

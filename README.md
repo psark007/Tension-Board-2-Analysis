@@ -347,7 +347,6 @@ predictions = model.predict(X)
 ## Model files
 
 * `models/random_forest_tuned.pkl` — trained Random Forest
-* `models/scaler.joblib` — feature scaler (if applicable)
 
 ---
 ## Using the Prediction Script

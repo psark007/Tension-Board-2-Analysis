@@ -62,7 +62,7 @@ The utility [`BoardLib`](https://github.com/lemeryfertitta/BoardLib) is used for
 We'll work with the Tension Board 2. I downloaded TB2 data as `tb2.db`, and I also downloaded the images.
 
 ```bash
-# install boardlib
+# install boardlib (also in requirements.txt)
 pip install boardlib
 
 # download the database

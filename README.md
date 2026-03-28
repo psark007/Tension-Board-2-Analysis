@@ -13,10 +13,10 @@ I recently got into *board climbing*, and have been enjoying using the <a href="
 
 This project analyzes ~130,000 climbs from the Tension Boards in order to do the following.
 > 1. **Understand** hold usage patterns and difficulty distributions
-> 2. **Quantify** empircal hold difficulty scores (for analysis)
+> 2. **Quantify** empircal hold difficulty scores
 > 3. **Predict** climb grades from spatial and structural features of climbs
 
-Climbing grades are inherently subjective. Different climbers use different beta, setters have different grading standards, and difficulty depends on factors not always captured in data. What makes it harder in the case of the board climbing is that the grade is displayed almost democratically -- it is determined by user input. 
+Climbing grades are inherently subjective. Different climbers use different beta, setters have different grading standards, and difficulty depends on factors not always captured in data. Moreover, on the boards, the displayed grade for any specific climb is based on user input.
 
 Using a Tension Board (2) dataset, this project combines:
 
@@ -153,7 +153,7 @@ Beyond structural analysis, we can also study how board-climbers behave over tim
 ![Hold Difficulty](images/03_hold_difficulty/difficulty_hand_40deg.png)
 
 * Hold difficulty is estimated from climb data
-* We averaged (pre-role/per-angle) difficulty for each hold (with Bayesian smoothing)
+* We averaged (per-role/per-angle) difficulty for each hold (with Bayesian smoothing)
 * Took advantage of the mirrored layout to increase the amount of data per hold
 
 ### Key technique: Bayesian smoothing
@@ -273,7 +273,7 @@ Models tested:
 
 ### Feature importance
 
-![RF Feature Importance](images/05_predictive_modelling/random_forest_importance.png)
+![RF Feature Importance](images/05_predictive_modelling/random_forest_feature_importance.png)
 ![Neural Network Feature Importance](images/06_deep_learning/neural_network_feature_importance.png)
 
 Key drivers:
@@ -289,7 +289,7 @@ This confirms that **difficulty is strongly tied to spatial arrangement and move
 
 ## 10. Model Performance
 
-![RF redicted vs Actual](images/05_predictive_modelling/random_forest_predictions.png)
+![RF Predicted vs Actual](images/05_predictive_modelling/random_forest_predictions.png)
 ![NN Predicted vs Actual](images/06_deep_learning/neural_network_predictions.png)
 
 ### Results (in terms of V-grade)

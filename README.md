@@ -13,8 +13,8 @@ I recently got into *board climbing*, and have been enjoying using the <a href="
 
 This project analyzes ~130,000 climbs from the Tension Boards in order to do the following.
 > 1. **Understand** hold usage patterns and difficulty distributions
-> 2. **Quantify** empircal hold difficulty scores
-> 3. **Predict** climb grades from hold positions and board angle
+> 2. **Quantify** empircal hold difficulty scores (for analysis)
+> 3. **Predict** climb grades from spatial and structural features of climbs
 
 Climbing grades are inherently subjective. Different climbers use different beta, setters have different grading standards, and difficulty depends on factors not always captured in data. What makes it harder in the case of the board climbing is that the grade is displayed almost democratically -- it is determined by user input. 
 
@@ -92,7 +92,7 @@ Go to your working directory and run notebooks in order:
 Note:
 
 * Notebooks 01-03 are uploaded with all of their cells run, so that one can see the data analysis. Notebooks 04-06 are uploaded without having been run.
-* Notebook 03 generates hold difficulty tables
+* Notebook 03 generates global hold difficulty tables
 * Notebook 04 generates feature matrix
 * Notebook 05 trains models
 * Notebook 06 trains neural network
@@ -167,9 +167,9 @@ This significantly improves downstream feature quality.
  
 ---
 
-## 6. Many more!
+## 6. Many more
 
-There are many other statistics, see notebooks [`01`](notebooks/01_data_overview_and_climbing_statistics.ipynb) (climbing statistics), [`02`](notebooks/02_hold_analysis_and_board_heatmaps.ipynb) (climbing hold statistics), and [`03`](notebooks/03_hold_difficulty.ipynb). Included are:
+There are many other statistics, see notebooks [`01`](notebooks/01_data_overview_and_climbing_statistics.ipynb) (climbing statistics), [`02`](notebooks/02_hold_analysis_and_board_heatmaps.ipynb) (climbing hold statistics), and [`03`](notebooks/03_hold_difficulty.ipynb) (climbing hold difficulty). Included are:
 
 * **Time-Date analysis** based on `fa_at`. We include month, day of week, and time analysis based on first ascent log data. Winter months are the most popular, and Tuesday and Wednesday are the most popular days of the week.
 * **Distribution of climbs per angle**, with 40 degrees being the most common.
@@ -178,6 +178,7 @@ There are many other statistics, see notebooks [`01`](notebooks/01_data_overview
 * **Prolific statistics**: most popular routes & setters
 * **Plastic vs wood** hold analysis
 * **Per-Angle, Per-Grade** hold frequency & difficulty analyses
+* more!
 
 ---
 
@@ -189,24 +190,33 @@ This section focuses on **building predictive models and evaluating performance*
 
 ## 7. Feature Engineering
 
-Features are constructed at the climb level using:
+Features are constructed at the climb level using only **structural and geometric information** derived from the climb definition (`angle` and `frames`).
 
-* geometry (height, spread, convex hull)
-* structure (number of moves, clustering)
-* hold difficulty (smoothed estimates)
-* interaction features
+We explicitly avoid using hold-difficulty-derived features in the predictive models to prevent target leakage.
+
+Feature categories include:
+
+* **Geometry** — spatial footprint of the climb (height, spread, convex hull)
+* **Movement** — reach distances and spatial relationships between holds
+* **Density** — how tightly or sparsely holds are arranged
+* **Symmetry** — left/right balance and distribution
+* **Path structure** — approximations of movement flow and efficiency
+* **Normalized position** — relative positioning on the board
+* **Interaction features** — simple nonlinear combinations (e.g., angle × hold count)
+
+This results in a **leakage-free feature set** that better reflects the physical structure of climbing.
 
 
-| Category      | Description                       | Examples                                    |
-| ------------- | --------------------------------- | ------------------------------------------- |
-| Geometry      | Shape and size of climb           | bbox_area, range_x, range_y                 |
-| Movement      | Reach and movement complexity     | max_hand_reach, path_efficiency             |
-| Difficulty    | Hold-based difficulty metrics     | mean_hold_difficulty, max_hold_difficulty   |
-| Progression   | How difficulty changes over climb | difficulty_gradient, difficulty_progression |
-| Symmetry      | Left/right balance                | symmetry_score, hand_symmetry               |
-| Clustering    | Local density of holds            | mean_neighbors_12in                         |
-| Normalization | Relative board positioning        | mean_y_normalized                           |
-| Distribution  | Vertical distribution of holds    | y_q25, y_q75                                |
+| Category      | Description                              | Examples                                  |
+| ------------- | ---------------------------------------- | ----------------------------------------- |
+| Geometry      | Shape and size of climb                  | bbox_area, range_x, range_y               |
+| Movement      | Reach and movement structure             | mean_hand_reach, path_efficiency          |
+| Density       | Hold spacing and compactness             | hold_density, holds_per_vertical_foot     |
+| Symmetry      | Left/right balance                       | symmetry_score, left_ratio                |
+| Path          | Approximate movement trajectory          | path_length_vertical                      |
+| Position      | Relative board positioning               | mean_y_normalized, start_height_normalized|
+| Distribution  | Vertical distribution of holds           | y_q75, y_iqr                              |
+| Interaction   | Nonlinear feature combinations           | angle_squared, angle_x_holds              |
 
 ### Important design decision
 
@@ -215,6 +225,22 @@ The dataset is restricted to:
 > **climbs with angle ≤ 50°**
 
 to reduce variability and improve consistency. (see [Angle vs Difficulty](#3-angle-vs-difficulty), where average climb grade seems to stabilize or get lower over 50°)
+
+###
+
+### Important: Leakage and Feature Design
+
+Earlier iterations of this project included features derived from hold difficulty scores (computed from climb grades). While these features slightly improved predictive performance, they introduce a form of **target leakage** if computed globally.
+
+In this version of the project:
+
+* Hold difficulty scores are still computed in Notebook 03 for **exploratory analysis**
+* Predictive models (Notebooks 04–06) use only **leakage-free features**
+* No feature is derived from the target variable (`display_difficulty`)
+
+This allows the model to learn from the **structure of climbs themselves**, rather than from aggregated statistics of the labels.
+
+Note: Hold-difficulty-based features can still be valid in a production setting if computed strictly from historical (training) data, similar to target encoding techniques.
 
 ---
 
@@ -225,10 +251,10 @@ Here are some relationships between features and difficulty
 ![Correlation Heatmap](images/04_climb_features/feature_correlations.png)
 
 * higher angles allow for harder difficulties
-* hold difficulty features seem to correlate the most to difficulty
-* engineered features capture non-trivial structure
+* distance between holds seems to correlate with difficulty
+* geoemetric and structural features capture non-trivial climbing patterns
 
-We have a full feature list in [`data/04_climb_features/feature_list.txt`](data/04_climb_features/feature_list.txt). Explanations are available in [`data/04_climb_features/feature_list_explanations.txt`](data/04_climb_features/feature_explanations.txt).
+We have a full feature list in [`data/04_climb_features/feature_list.txt`](data/04_climb_features/feature_list.txt). Explanations are available in [`data/04_climb_features/feature_explanations.txt`](data/04_climb_features/feature_explanations.txt).
 
 ---
 
@@ -252,9 +278,12 @@ Models tested:
 
 Key drivers:
 
-* hold difficulty
 * wall angle
-* structural features
+* reach-based features (e.g., mean/max hand reach)
+* spatial density and distribution
+* geometric structure of the climb
+
+This confirms that **difficulty is strongly tied to spatial arrangement and movement constraints**, rather than just individual hold properties.
 
 ---
 
@@ -263,11 +292,14 @@ Key drivers:
 ![RF redicted vs Actual](images/05_predictive_modelling/random_forest_predictions.png)
 ![NN Predicted vs Actual](images/06_deep_learning/neural_network_predictions.png)
 
-### Results (in terms of difficulty score)
+### Results (in terms of V-grade)
 Both the RF and NN models performed similarly.
-* **~83% within ±1 V-grade (~45% within ±1 difficulty score)**
-* **~96% within ±2 V-grade (~80% within ±2 difficulty scores)**
+* **~70% within ±1 V-grade (~36% within ±1 difficulty score)**
+* **~90% within ±2 V-grade (~65% within ±2 difficulty scores)**
 
+In earlier experiements, we were able to achieve ~83% within one V-grade and ~96% within 2. However, that setup used hold-difficulties from notebook 03 derived from climbing grades, creating leakage. This result is more realistic and more independent: the model relies purely on spatial and structural information, without access to hold-based information or beta.
+
+This demonstrates that a substantial portion of climbing difficulty can be attributed to geometry and movement constraints. 
 
 ### Interpretation
 
@@ -284,15 +316,15 @@ Both the RF and NN models performed similarly.
 
 | Metric             | Performance |
 | ------------------ | ----------- |
-| Within ±1 V-grade  | ~83%        |
-| Within ±2 V-grades | ~96%        |
+| Within ±1 V-grade  | ~70%        |
+| Within ±2 V-grades | ~90%        |
 
 The model can still predict subgrades (e.g., V3 contains 6a and 6a+), but it is not as accurate.
 
 | Metric             | Performance |
 | ------------------ | ----------- |
-| Within ±1 difficulty-grade  | ~45%        |
-| Within ±2 difficulty-grades | ~80%        |
+| Within ±1 difficulty-grade  | ~36%        |
+| Within ±2 difficulty-grades | ~65%        |
 
 ---
 
@@ -312,7 +344,8 @@ The model can still predict subgrades (e.g., V3 contains 6a and 6a+), but it is 
 
 # Future Work
 
-* Kilter Board analysis
+* <a href="https://gitlab.com/psark/Kilter-Board-Analysis">~~Kilter Board analysis~~</a>
+* A unified approach to grade prediction across boards
 * Test other models
 * Better spatial features
 * GUI to create climb and instantly tell you a predicted difficulty

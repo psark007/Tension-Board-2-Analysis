@@ -2,25 +2,25 @@
 ### Neural Network Model Summary
 
 **Architecture:**
-- Input: 119 features
+- Input: 48 features
 - Hidden layers: [256, 128, 64]
 - Dropout rate: 0.2
-- Total parameters: 72,833
+- Total parameters: 54,657
 
 **Training:**
 - Optimizer: Adam (lr=0.001)
 - Early stopping: 25 epochs patience
-- Best epoch: 121
+- Best epoch: 153
 
 **Test Set Performance:**
-- MAE: 1.270
-- RMSE: 1.643
-- R²: 0.834
-- Accuracy within ±1 grade: 49.0%
-- Accuracy within ±2 grades: 80.2%
-- Exact grouped V-grade accuracy: 39.2%
-- Accuracy within ±1 V-grade: 84.3%
-- Accuracy within ±2 V-grades: 96.8%
+- MAE: 1.893
+- RMSE: 2.398
+- R²: 0.646
+- Accuracy within ±1 grade: 33.8%
+- Accuracy within ±2 grades: 60.5%
+- Exact grouped V-grade accuracy: 27.8%
+- Accuracy within ±1 V-grade: 67.9%
+- Accuracy within ±2 V-grades: 88.4%
 
 **Key Findings:**
 1. The neural network is competitive, but not clearly stronger than the best tree-based baseline.

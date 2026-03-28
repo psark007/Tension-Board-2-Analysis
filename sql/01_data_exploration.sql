@@ -402,6 +402,20 @@ id|product_id|name|x |y  |mirrored_hole_id|mirror_group|
  * With the TB1 and TB2 Mirror, you can mirror climbs. So the mirror_hole_id must be where the associated mirror hole is.
  * Not sure about the mirror_group.
  *
+ * Let's also take a look at our range of holes.
+ */
+
+ SELECT 
+    MIN(x) AS x_min,
+    MAX(x) AS x_max,
+    MIN(y) AS y_min,
+    MAX(y) AS y_max
+FROM holes WHERE product_id=5
+/*
+x_min|x_max|y_min|y_max|
+-----+-----+-----+-----+
+  -64|   64|    4|  140|
+ *
  * Let's look at sets next.
  */
 

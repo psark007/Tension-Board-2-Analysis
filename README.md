@@ -273,7 +273,7 @@ Models tested:
 
 ### Feature importance
 
-![RF Feature Importance](images/05_predictive_modelling/random_forest_feature_importance.png)
+![RF Feature Importance](images/05_predictive_modelling/random_forest_importance.png)
 ![Neural Network Feature Importance](images/06_deep_learning/neural_network_feature_importance.png)
 
 Key drivers:

@@ -23,7 +23,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 SCALER_PATH = ROOT / "models" / "feature_scaler.pkl"
 FEATURE_NAMES_PATH = ROOT / "models" / "feature_names.txt"
-HOLD_DIFFICULTY_PATH = ROOT / "data" / "03_hold_difficulty" / "hold_difficulty_scores.csv"
 PLACEMENTS_PATH = ROOT / "data" / "placements.csv"  # adjust if needed
 
 
@@ -164,7 +163,6 @@ scaler = joblib.load(SCALER_PATH)
 with open(FEATURE_NAMES_PATH, "r") as f:
     FEATURE_NAMES = [line.strip() for line in f if line.strip()]
 
-df_hold_difficulty = pd.read_csv(HOLD_DIFFICULTY_PATH, index_col="placement_id")
 df_placements = pd.read_csv(PLACEMENTS_PATH)
 
 placement_coords = {
@@ -260,46 +258,14 @@ def parse_frames(frames: str):
     return [(int(p), int(r)) for p, r in matches]
 
 
-def lookup_hold_difficulty(placement_id, angle, role_type, is_hand, is_foot):
-    """
-    Preference order:
-    1. role-specific per-angle
-    2. aggregate hand/foot per-angle
-    3. overall_difficulty fallback
-    """
-    if placement_id not in df_hold_difficulty.index:
-        return np.nan
-
-    row = df_hold_difficulty.loc[placement_id]
-
-    diff_key = f"{role_type}_diff_{int(angle)}deg"
-    hand_diff_key = f"hand_diff_{int(angle)}deg"
-    foot_diff_key = f"foot_diff_{int(angle)}deg"
-
-    difficulty = np.nan
-
-    if diff_key in row.index:
-        difficulty = row[diff_key]
-
-    if pd.isna(difficulty):
-        if is_hand and hand_diff_key in row.index:
-            difficulty = row[hand_diff_key]
-        elif is_foot and foot_diff_key in row.index:
-            difficulty = row[foot_diff_key]
-
-    if pd.isna(difficulty) and "overall_difficulty" in row.index:
-        difficulty = row["overall_difficulty"]
-
-    return difficulty
-
-
 # ============================================================
 # Feature extraction
 # ============================================================
 
 def extract_features_from_raw(angle, frames, is_nomatch=0, description=""):
-    features = {}
-
+    """
+    Extract the clean, leakage-free feature set used by the updated models.
+    """
     holds = parse_frames(frames)
     if not holds:
         raise ValueError("Could not parse any holds from frames.")
@@ -311,26 +277,16 @@ def extract_features_from_raw(angle, frames, is_nomatch=0, description=""):
             continue
 
         role_type = get_role_type(role_id)
-        is_hand = role_id in HAND_ROLE_IDS
-        is_foot = role_id in FOOT_ROLE_IDS
-
-        difficulty = lookup_hold_difficulty(
-            placement_id=placement_id,
-            angle=angle,
-            role_type=role_type,
-            is_hand=is_hand,
-            is_foot=is_foot,
-        )
+        is_hand_role = role_id in HAND_ROLE_IDS
+        is_foot_role = role_id in FOOT_ROLE_IDS
 
         hold_data.append({
             "placement_id": placement_id,
             "x": coords[0],
             "y": coords[1],
-            "role_id": role_id,
             "role_type": role_type,
-            "is_hand": is_hand,
-            "is_foot": is_foot,
-            "difficulty": difficulty,
+            "is_hand": is_hand_role,
+            "is_foot": is_foot_role,
         })
 
     if not hold_data:
@@ -344,389 +300,157 @@ def extract_features_from_raw(angle, frames, is_nomatch=0, description=""):
     finish_holds = df_holds[df_holds["role_type"] == "finish"]
     middle_holds = df_holds[df_holds["role_type"] == "middle"]
 
-    xs = df_holds["x"].values
-    ys = df_holds["y"].values
-
-    features["angle"] = angle
-
-    features["total_holds"] = len(df_holds)
-    features["hand_holds"] = len(hand_holds)
-    features["foot_holds"] = len(foot_holds)
-    features["start_holds"] = len(start_holds)
-    features["finish_holds"] = len(finish_holds)
-    features["middle_holds"] = len(middle_holds)
+    xs = df_holds["x"].to_numpy()
+    ys = df_holds["y"].to_numpy()
 
     desc = str(description) if description is not None else ""
+    if pd.isna(desc):
+        desc = ""
+
+    center_x = (x_min + x_max) / 2
+    features = {}
+
+    # Core / counts
+    features["angle"] = float(angle)
+    features["angle_squared"] = float(angle) ** 2
+    features["total_holds"] = int(len(df_holds))
+    features["hand_holds"] = int(len(hand_holds))
+    features["foot_holds"] = int(len(foot_holds))
+    features["start_holds"] = int(len(start_holds))
+    features["finish_holds"] = int(len(finish_holds))
+    features["middle_holds"] = int(len(middle_holds))
     features["is_nomatch"] = int(
         (is_nomatch == 1) or
         bool(re.search(r"\bno\s*match(ing)?\b", desc, flags=re.IGNORECASE))
     )
 
-    features["mean_x"] = np.mean(xs)
-    features["mean_y"] = np.mean(ys)
-    features["std_x"] = np.std(xs) if len(xs) > 1 else 0
-    features["std_y"] = np.std(ys) if len(ys) > 1 else 0
-    features["range_x"] = np.max(xs) - np.min(xs)
-    features["range_y"] = np.max(ys) - np.min(ys)
-    features["min_y"] = np.min(ys)
-    features["max_y"] = np.max(ys)
-
-    if len(start_holds) > 0:
-        features["start_height"] = start_holds["y"].mean()
-        features["start_height_min"] = start_holds["y"].min()
-        features["start_height_max"] = start_holds["y"].max()
-    else:
-        features["start_height"] = np.nan
-        features["start_height_min"] = np.nan
-        features["start_height_max"] = np.nan
-
-    if len(finish_holds) > 0:
-        features["finish_height"] = finish_holds["y"].mean()
-        features["finish_height_min"] = finish_holds["y"].min()
-        features["finish_height_max"] = finish_holds["y"].max()
-    else:
-        features["finish_height"] = np.nan
-        features["finish_height_min"] = np.nan
-        features["finish_height_max"] = np.nan
-
+    # Spatial
+    features["mean_y"] = float(np.mean(ys))
+    features["std_x"] = float(np.std(xs)) if len(xs) > 1 else 0.0
+    features["std_y"] = float(np.std(ys)) if len(ys) > 1 else 0.0
+    features["range_x"] = float(np.max(xs) - np.min(xs))
+    features["range_y"] = float(np.max(ys) - np.min(ys))
+    features["min_y"] = float(np.min(ys))
+    features["max_y"] = float(np.max(ys))
     features["height_gained"] = features["max_y"] - features["min_y"]
 
-    if pd.notna(features["finish_height"]) and pd.notna(features["start_height"]):
-        features["height_gained_start_finish"] = features["finish_height"] - features["start_height"]
-    else:
-        features["height_gained_start_finish"] = np.nan
+    start_height = float(start_holds["y"].mean()) if len(start_holds) > 0 else np.nan
+    finish_height = float(finish_holds["y"].mean()) if len(finish_holds) > 0 else np.nan
+    features["height_gained_start_finish"] = (
+        finish_height - start_height
+        if pd.notna(start_height) and pd.notna(finish_height)
+        else np.nan
+    )
 
-    bbox_width = features["range_x"]
-    bbox_height = features["range_y"]
-    features["bbox_area"] = bbox_width * bbox_height
-    features["bbox_aspect_ratio"] = bbox_width / bbox_height if bbox_height > 0 else 0
-    features["bbox_normalized_area"] = features["bbox_area"] / (board_width * board_height)
+    # Density / symmetry
+    bbox_area = features["range_x"] * features["range_y"]
+    features["bbox_area"] = float(bbox_area)
+    features["hold_density"] = float(features["total_holds"] / bbox_area) if bbox_area > 0 else 0.0
+    features["holds_per_vertical_foot"] = float(features["total_holds"] / max(features["range_y"], 1))
 
-    features["hold_density"] = features["total_holds"] / features["bbox_area"] if features["bbox_area"] > 0 else 0
-    features["holds_per_vertical_foot"] = features["total_holds"] / max(features["range_y"], 1)
-
-    center_x = (x_min + x_max) / 2
-    features["left_holds"] = (df_holds["x"] < center_x).sum()
-    features["right_holds"] = (df_holds["x"] >= center_x).sum()
-    features["left_ratio"] = features["left_holds"] / features["total_holds"] if features["total_holds"] > 0 else 0.5
+    left_holds = int((df_holds["x"] < center_x).sum())
+    features["left_ratio"] = left_holds / features["total_holds"] if features["total_holds"] > 0 else 0.5
     features["symmetry_score"] = 1 - abs(features["left_ratio"] - 0.5) * 2
 
-    if len(hand_holds) > 0:
-        hand_left = (hand_holds["x"] < center_x).sum()
-        features["hand_left_ratio"] = hand_left / len(hand_holds)
-        features["hand_symmetry"] = 1 - abs(features["hand_left_ratio"] - 0.5) * 2
-    else:
-        features["hand_left_ratio"] = np.nan
-        features["hand_symmetry"] = np.nan
-
     y_median = np.median(ys)
-    features["upper_holds"] = (df_holds["y"] > y_median).sum()
-    features["lower_holds"] = (df_holds["y"] <= y_median).sum()
-    features["upper_ratio"] = features["upper_holds"] / features["total_holds"]
+    upper_holds = int((df_holds["y"] > y_median).sum())
+    features["upper_ratio"] = upper_holds / features["total_holds"]
 
+    # Hand reach
     if len(hand_holds) >= 2:
-        hand_xs = hand_holds["x"].values
-        hand_ys = hand_holds["y"].values
+        hand_points = hand_holds[["x", "y"]].to_numpy()
+        hand_distances = pdist(hand_points)
+        hand_xs = hand_holds["x"].to_numpy()
+        hand_ys = hand_holds["y"].to_numpy()
 
-        hand_distances = []
-        for i in range(len(hand_holds)):
-            for j in range(i + 1, len(hand_holds)):
-                dx = hand_xs[i] - hand_xs[j]
-                dy = hand_ys[i] - hand_ys[j]
-                hand_distances.append(np.sqrt(dx**2 + dy**2))
-
-        features["max_hand_reach"] = max(hand_distances)
-        features["min_hand_reach"] = min(hand_distances)
-        features["mean_hand_reach"] = np.mean(hand_distances)
-        features["std_hand_reach"] = np.std(hand_distances)
-        features["hand_spread_x"] = hand_xs.max() - hand_xs.min()
-        features["hand_spread_y"] = hand_ys.max() - hand_ys.min()
+        features["mean_hand_reach"] = float(np.mean(hand_distances))
+        features["max_hand_reach"] = float(np.max(hand_distances))
+        features["std_hand_reach"] = float(np.std(hand_distances))
+        features["hand_spread_x"] = float(hand_xs.max() - hand_xs.min())
+        features["hand_spread_y"] = float(hand_ys.max() - hand_ys.min())
     else:
-        features["max_hand_reach"] = 0
-        features["min_hand_reach"] = 0
-        features["mean_hand_reach"] = 0
-        features["std_hand_reach"] = 0
-        features["hand_spread_x"] = 0
-        features["hand_spread_y"] = 0
+        features["mean_hand_reach"] = 0.0
+        features["max_hand_reach"] = 0.0
+        features["std_hand_reach"] = 0.0
+        features["hand_spread_x"] = 0.0
+        features["hand_spread_y"] = 0.0
 
-    if len(foot_holds) >= 2:
-        foot_xs = foot_holds["x"].values
-        foot_ys = foot_holds["y"].values
-
-        foot_distances = []
-        for i in range(len(foot_holds)):
-            for j in range(i + 1, len(foot_holds)):
-                dx = foot_xs[i] - foot_xs[j]
-                dy = foot_ys[i] - foot_ys[j]
-                foot_distances.append(np.sqrt(dx**2 + dy**2))
-
-        features["max_foot_spread"] = max(foot_distances)
-        features["mean_foot_spread"] = np.mean(foot_distances)
-        features["foot_spread_x"] = foot_xs.max() - foot_xs.min()
-        features["foot_spread_y"] = foot_ys.max() - foot_ys.min()
-    else:
-        features["max_foot_spread"] = 0
-        features["mean_foot_spread"] = 0
-        features["foot_spread_x"] = 0
-        features["foot_spread_y"] = 0
-
+    # Hand-foot distances
     if len(hand_holds) > 0 and len(foot_holds) > 0:
-        h2f_distances = []
-        for _, h in hand_holds.iterrows():
-            for _, f in foot_holds.iterrows():
-                dx = h["x"] - f["x"]
-                dy = h["y"] - f["y"]
-                h2f_distances.append(np.sqrt(dx**2 + dy**2))
+        hand_points = hand_holds[["x", "y"]].to_numpy()
+        foot_points = foot_holds[["x", "y"]].to_numpy()
+        dists = []
+        for hx, hy in hand_points:
+            for fx, fy in foot_points:
+                dists.append(np.sqrt((hx - fx) ** 2 + (hy - fy) ** 2))
+        dists = np.asarray(dists, dtype=float)
 
-        features["max_hand_to_foot"] = max(h2f_distances)
-        features["min_hand_to_foot"] = min(h2f_distances)
-        features["mean_hand_to_foot"] = np.mean(h2f_distances)
-        features["std_hand_to_foot"] = np.std(h2f_distances)
+        features["min_hand_to_foot"] = float(np.min(dists))
+        features["mean_hand_to_foot"] = float(np.mean(dists))
+        features["std_hand_to_foot"] = float(np.std(dists))
     else:
-        features["max_hand_to_foot"] = 0
-        features["min_hand_to_foot"] = 0
-        features["mean_hand_to_foot"] = 0
-        features["std_hand_to_foot"] = 0
+        features["min_hand_to_foot"] = 0.0
+        features["mean_hand_to_foot"] = 0.0
+        features["std_hand_to_foot"] = 0.0
 
-    difficulties = df_holds["difficulty"].dropna().values
-
-    if len(difficulties) > 0:
-        features["mean_hold_difficulty"] = np.mean(difficulties)
-        features["max_hold_difficulty"] = np.max(difficulties)
-        features["min_hold_difficulty"] = np.min(difficulties)
-        features["std_hold_difficulty"] = np.std(difficulties)
-        features["median_hold_difficulty"] = np.median(difficulties)
-        features["difficulty_range"] = features["max_hold_difficulty"] - features["min_hold_difficulty"]
-    else:
-        features["mean_hold_difficulty"] = np.nan
-        features["max_hold_difficulty"] = np.nan
-        features["min_hold_difficulty"] = np.nan
-        features["std_hold_difficulty"] = np.nan
-        features["median_hold_difficulty"] = np.nan
-        features["difficulty_range"] = np.nan
-
-    hand_diffs = hand_holds["difficulty"].dropna().values if len(hand_holds) > 0 else np.array([])
-    if len(hand_diffs) > 0:
-        features["mean_hand_difficulty"] = np.mean(hand_diffs)
-        features["max_hand_difficulty"] = np.max(hand_diffs)
-        features["std_hand_difficulty"] = np.std(hand_diffs)
-    else:
-        features["mean_hand_difficulty"] = np.nan
-        features["max_hand_difficulty"] = np.nan
-        features["std_hand_difficulty"] = np.nan
-
-    foot_diffs = foot_holds["difficulty"].dropna().values if len(foot_holds) > 0 else np.array([])
-    if len(foot_diffs) > 0:
-        features["mean_foot_difficulty"] = np.mean(foot_diffs)
-        features["max_foot_difficulty"] = np.max(foot_diffs)
-        features["std_foot_difficulty"] = np.std(foot_diffs)
-    else:
-        features["mean_foot_difficulty"] = np.nan
-        features["max_foot_difficulty"] = np.nan
-        features["std_foot_difficulty"] = np.nan
-
-    start_diffs = start_holds["difficulty"].dropna().values if len(start_holds) > 0 else np.array([])
-    finish_diffs = finish_holds["difficulty"].dropna().values if len(finish_holds) > 0 else np.array([])
-    features["start_difficulty"] = np.mean(start_diffs) if len(start_diffs) > 0 else np.nan
-    features["finish_difficulty"] = np.mean(finish_diffs) if len(finish_diffs) > 0 else np.nan
-
-    features["hand_foot_ratio"] = features["hand_holds"] / max(features["foot_holds"], 1)
-    features["movement_density"] = features["total_holds"] / max(features["height_gained"], 1)
-    features["hold_com_x"] = np.average(xs)
-    features["hold_com_y"] = np.average(ys)
-
-    if len(difficulties) > 0 and len(ys) >= len(difficulties):
-        weights = (ys[:len(difficulties)] - ys.min()) / max(ys.max() - ys.min(), 1) + 0.5
-        features["weighted_difficulty"] = np.average(difficulties, weights=weights)
-    else:
-        features["weighted_difficulty"] = features["mean_hold_difficulty"]
+    # Global geometry
+    points = np.column_stack([xs, ys])
 
     if len(df_holds) >= 3:
         try:
-            points = np.column_stack([xs, ys])
             hull = ConvexHull(points)
-            features["convex_hull_area"] = hull.volume
-            features["convex_hull_perimeter"] = hull.area
-            features["hull_area_to_bbox_ratio"] = features["convex_hull_area"] / max(features["bbox_area"], 1)
+            features["convex_hull_area"] = float(hull.volume)
+            features["hull_area_to_bbox_ratio"] = float(features["convex_hull_area"] / max(bbox_area, 1))
         except Exception:
             features["convex_hull_area"] = np.nan
-            features["convex_hull_perimeter"] = np.nan
             features["hull_area_to_bbox_ratio"] = np.nan
     else:
-        features["convex_hull_area"] = 0
-        features["convex_hull_perimeter"] = 0
-        features["hull_area_to_bbox_ratio"] = 0
+        features["convex_hull_area"] = 0.0
+        features["hull_area_to_bbox_ratio"] = 0.0
 
     if len(df_holds) >= 2:
-        points = np.column_stack([xs, ys])
-        distances = pdist(points)
-        features["min_nn_distance"] = np.min(distances)
-        features["mean_nn_distance"] = np.mean(distances)
-        features["max_nn_distance"] = np.max(distances)
-        features["std_nn_distance"] = np.std(distances)
+        pairwise = pdist(points)
+        features["mean_pairwise_distance"] = float(np.mean(pairwise))
+        features["std_pairwise_distance"] = float(np.std(pairwise))
     else:
-        features["min_nn_distance"] = 0
-        features["mean_nn_distance"] = 0
-        features["max_nn_distance"] = 0
-        features["std_nn_distance"] = 0
-
-    if len(df_holds) >= 3:
-        points = np.column_stack([xs, ys])
-        dist_matrix = squareform(pdist(points))
-        threshold = 12.0
-        neighbors_count = (dist_matrix < threshold).sum(axis=1) - 1
-        features["mean_neighbors_12in"] = np.mean(neighbors_count)
-        features["max_neighbors_12in"] = np.max(neighbors_count)
-        avg_neighbors = np.mean(neighbors_count)
-        max_possible = len(df_holds) - 1
-        features["clustering_ratio"] = avg_neighbors / max_possible if max_possible > 0 else 0
-    else:
-        features["mean_neighbors_12in"] = 0
-        features["max_neighbors_12in"] = 0
-        features["clustering_ratio"] = 0
+        features["mean_pairwise_distance"] = 0.0
+        features["std_pairwise_distance"] = 0.0
 
     if len(df_holds) >= 2:
-        sorted_indices = np.argsort(ys)
-        sorted_points = np.column_stack([xs[sorted_indices], ys[sorted_indices]])
-
-        path_length = 0
+        sorted_idx = np.argsort(ys)
+        sorted_points = points[sorted_idx]
+        path_length = 0.0
         for i in range(len(sorted_points) - 1):
             dx = sorted_points[i + 1, 0] - sorted_points[i, 0]
             dy = sorted_points[i + 1, 1] - sorted_points[i, 1]
-            path_length += np.sqrt(dx**2 + dy**2)
+            path_length += np.sqrt(dx ** 2 + dy ** 2)
 
-        features["path_length_vertical"] = path_length
-        features["path_efficiency"] = features["height_gained"] / max(path_length, 1)
+        features["path_length_vertical"] = float(path_length)
+        features["path_efficiency"] = float(features["height_gained"] / max(path_length, 1))
     else:
-        features["path_length_vertical"] = 0
-        features["path_efficiency"] = 0
+        features["path_length_vertical"] = 0.0
+        features["path_efficiency"] = 0.0
 
-    if pd.notna(features["finish_difficulty"]) and pd.notna(features["start_difficulty"]):
-        features["difficulty_gradient"] = features["finish_difficulty"] - features["start_difficulty"]
-    else:
-        features["difficulty_gradient"] = np.nan
+    # Normalized / relative
+    features["mean_y_normalized"] = float((features["mean_y"] - y_min) / board_height)
+    features["start_height_normalized"] = float((start_height - y_min) / board_height) if pd.notna(start_height) else np.nan
+    features["finish_height_normalized"] = float((finish_height - y_min) / board_height) if pd.notna(finish_height) else np.nan
+    features["mean_y_relative_to_start"] = float(features["mean_y"] - start_height) if pd.notna(start_height) else np.nan
+    features["spread_x_normalized"] = float(features["range_x"] / board_width)
+    features["spread_y_normalized"] = float(features["range_y"] / board_height)
 
-    if len(difficulties) > 0:
-        y_min_val, y_max_val = ys.min(), ys.max()
-        y_range = y_max_val - y_min_val
+    y_q75 = np.percentile(ys, 75)
+    y_q25 = np.percentile(ys, 25)
+    features["y_q75"] = float(y_q75)
+    features["y_iqr"] = float(y_q75 - y_q25)
 
-        if y_range > 0:
-            lower_mask = ys <= (y_min_val + y_range / 3)
-            middle_mask = (ys > y_min_val + y_range / 3) & (ys <= y_min_val + 2 * y_range / 3)
-            upper_mask = ys > (y_min_val + 2 * y_range / 3)
-
-            df_with_diff = df_holds.copy()
-            df_with_diff["lower"] = lower_mask
-            df_with_diff["middle"] = middle_mask
-            df_with_diff["upper"] = upper_mask
-
-            lower_diffs = df_with_diff[df_with_diff["lower"] & df_with_diff["difficulty"].notna()]["difficulty"]
-            middle_diffs = df_with_diff[df_with_diff["middle"] & df_with_diff["difficulty"].notna()]["difficulty"]
-            upper_diffs = df_with_diff[df_with_diff["upper"] & df_with_diff["difficulty"].notna()]["difficulty"]
-
-            features["lower_region_difficulty"] = lower_diffs.mean() if len(lower_diffs) > 0 else np.nan
-            features["middle_region_difficulty"] = middle_diffs.mean() if len(middle_diffs) > 0 else np.nan
-            features["upper_region_difficulty"] = upper_diffs.mean() if len(upper_diffs) > 0 else np.nan
-
-            if pd.notna(features["lower_region_difficulty"]) and pd.notna(features["upper_region_difficulty"]):
-                features["difficulty_progression"] = features["upper_region_difficulty"] - features["lower_region_difficulty"]
-            else:
-                features["difficulty_progression"] = np.nan
-        else:
-            features["lower_region_difficulty"] = features["mean_hold_difficulty"]
-            features["middle_region_difficulty"] = features["mean_hold_difficulty"]
-            features["upper_region_difficulty"] = features["mean_hold_difficulty"]
-            features["difficulty_progression"] = 0
-    else:
-        features["lower_region_difficulty"] = np.nan
-        features["middle_region_difficulty"] = np.nan
-        features["upper_region_difficulty"] = np.nan
-        features["difficulty_progression"] = np.nan
-
-    if len(hand_holds) >= 2 and len(hand_diffs) >= 2:
-        hand_sorted = hand_holds.sort_values("y")
-        hand_diff_sorted = hand_sorted["difficulty"].dropna().values
-
-        if len(hand_diff_sorted) >= 2:
-            difficulty_jumps = np.abs(np.diff(hand_diff_sorted))
-            features["max_difficulty_jump"] = np.max(difficulty_jumps) if len(difficulty_jumps) > 0 else 0
-            features["mean_difficulty_jump"] = np.mean(difficulty_jumps) if len(difficulty_jumps) > 0 else 0
-        else:
-            features["max_difficulty_jump"] = 0
-            features["mean_difficulty_jump"] = 0
-    else:
-        features["max_difficulty_jump"] = 0
-        features["mean_difficulty_jump"] = 0
-
-    if len(hand_holds) >= 2 and len(hand_diffs) >= 2:
-        hand_sorted = hand_holds.sort_values("y")
-        xs_sorted = hand_sorted["x"].values
-        ys_sorted = hand_sorted["y"].values
-        diffs_sorted = hand_sorted["difficulty"].fillna(np.mean(hand_diffs)).values
-
-        weighted_reach = []
-        for i in range(len(hand_sorted) - 1):
-            dx = xs_sorted[i + 1] - xs_sorted[i]
-            dy = ys_sorted[i + 1] - ys_sorted[i]
-            dist = np.sqrt(dx**2 + dy**2)
-            avg_diff = (diffs_sorted[i] + diffs_sorted[i + 1]) / 2
-            weighted_reach.append(dist * avg_diff)
-
-        features["difficulty_weighted_reach"] = np.mean(weighted_reach) if weighted_reach else 0
-        features["max_weighted_reach"] = np.max(weighted_reach) if weighted_reach else 0
-    else:
-        features["difficulty_weighted_reach"] = 0
-        features["max_weighted_reach"] = 0
-
-    features["mean_x_normalized"] = (features["mean_x"] - x_min) / board_width
-    features["mean_y_normalized"] = (features["mean_y"] - y_min) / board_height
-    features["std_x_normalized"] = features["std_x"] / board_width
-    features["std_y_normalized"] = features["std_y"] / board_height
-
-    if pd.notna(features["start_height"]):
-        features["start_height_normalized"] = (features["start_height"] - y_min) / board_height
-    else:
-        features["start_height_normalized"] = np.nan
-
-    if pd.notna(features["finish_height"]):
-        features["finish_height_normalized"] = (features["finish_height"] - y_min) / board_height
-    else:
-        features["finish_height_normalized"] = np.nan
-
-    typical_start_y = y_min + board_height * 0.15
-    typical_finish_y = y_min + board_height * 0.85
-
-    if pd.notna(features["start_height"]):
-        features["start_offset_from_typical"] = abs(features["start_height"] - typical_start_y)
-    else:
-        features["start_offset_from_typical"] = np.nan
-
-    if pd.notna(features["finish_height"]):
-        features["finish_offset_from_typical"] = abs(features["finish_height"] - typical_finish_y)
-    else:
-        features["finish_offset_from_typical"] = np.nan
-
-    if len(start_holds) > 0:
-        start_y = start_holds["y"].mean()
-        features["mean_y_relative_to_start"] = features["mean_y"] - start_y
-        features["max_y_relative_to_start"] = features["max_y"] - start_y
-    else:
-        features["mean_y_relative_to_start"] = np.nan
-        features["max_y_relative_to_start"] = np.nan
-
-    features["spread_x_normalized"] = features["range_x"] / board_width
-    features["spread_y_normalized"] = features["range_y"] / board_height
-    features["bbox_coverage_x"] = features["range_x"] / board_width
-    features["bbox_coverage_y"] = features["range_y"] / board_height
-
-    y_quartiles = np.percentile(ys, [25, 50, 75])
-    features["y_q25"] = y_quartiles[0]
-    features["y_q50"] = y_quartiles[1]
-    features["y_q75"] = y_quartiles[2]
-    features["y_iqr"] = y_quartiles[2] - y_quartiles[0]
-
-    features["holds_bottom_quartile"] = (ys < y_quartiles[0]).sum()
-    features["holds_top_quartile"] = (ys >= y_quartiles[2]).sum()
+    # Engineered clean features
+    features["complexity_score"] = float(
+        features["mean_hand_reach"]
+        * np.log1p(features["total_holds"])
+        * (1 + features["hold_density"])
+    )
+    features["angle_x_holds"] = float(features["angle"] * features["total_holds"])
 
     return features
 

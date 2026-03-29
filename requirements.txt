@@ -6,5 +6,4 @@ scikit-learn
 jupyter
 notebook
 torch
-sqlite3
 boardlib

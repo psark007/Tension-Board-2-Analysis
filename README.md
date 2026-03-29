@@ -1,6 +1,6 @@
 # Tension Board 2: Predicting Climbing Route Difficulty from Board Data
 
-I recently got into *board climbing*, and have been enjoying using the <a href="https://tensionclimbing.com/products/tension-board-2">Tension Board 2</a>. I've been climbing on the 12ftx12ft (mirrored) that is available at my local gym, and I've never felt that the phrase "*it hurts so good*" would be so apt. As such, I decided to do an in depth analysis of available data. 
+I recently got into *board climbing*, and have been enjoying using the <a href="https://tensionclimbing.com/products/tension-board-2">Tension Board 2</a>. I've been climbing on the 12ftx12ft (mirrored) that is available at my local gym, and I've never felt that the phrase "*it hurts so good*" would be so apt. As such, I decided to do an in depth analysis of available data. See also an <a href="https://gitlab.com/psark/Kilter-Board-Analysis">analysis of the Kilter Board</a>.
 
 ![Hold Usage Heatmap](images/02_hold_stats/all_holds_all_grades_heatmap.png)
 
@@ -11,7 +11,7 @@ I recently got into *board climbing*, and have been enjoying using the <a href="
 
 ## Overview
 
-This project analyzes ~130,000 climbs from the Tension Boards in order to do the following.
+This project analyzes ~130,000 climbs on the Tension Boards in order to do the following.
 > 1. **Understand** hold usage patterns and difficulty distributions
 > 2. **Quantify** empircal hold difficulty scores
 > 3. **Predict** climb grades from spatial and structural features of climbs
@@ -91,7 +91,6 @@ Go to your working directory and run notebooks in order:
 
 Note:
 
-* Notebooks 01-03 are uploaded with all of their cells run, so that one can see the data analysis. Notebooks 04-06 are uploaded without having been run.
 * Notebook 03 generates global hold difficulty tables
 * Notebook 04 generates feature matrix
 * Notebook 05 trains models
